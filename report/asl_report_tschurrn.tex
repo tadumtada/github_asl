@@ -262,45 +262,45 @@ The middleware logs every request it processes. Each log entry consists of:
 \item time to send answer to the client
 \end{itemize}
 
-In order to minimize file access 500 log entries are written into a buffer before written to the log file. I need the time in the queue in order to be able to identify the middleware as a bottleneck. The database execution time can show when the database reaches a maximum workload. The time it takes to send the answer to the client can be used to analize the network.
+In order to minimize file access 500 log entries are written into a buffer before written to the log file. The database execution time can show when the database reaches a maximum workload. The time it takes to send the answer to the client can be used to analize the network.
 
 
-In order to run the middleware, use \texttt{ant run -Dargs `` <dbIP> <\#dbConnections> <ownIP> <testVersion> ''}
+In order to run the middleware, use \texttt{ant run -Dargs `` <dbIP> <\#dbConnections> <ownIP> <testVersion> ''}, where the last argument two arguments can be arbitrary.
 
 \subsection{Clients}
-The client is the most complex component in this system. The client needs to be able to fill the database with messages of a certain size and create queues in order to get database dumps which can be used for testing. The client also needs to implement an interface to the middleware. In order to test the system, the client also needs to be able to run over a long period of time without altering the number of messages in the database. I implemented different types of clients which can all be configured by the \texttt{ClientMaster}. The \texttt{ClientMaster} can create, register, deregister and start differint kinds of client instances.
+The client is the most complex component in this system. The client needs to be able to fill the database with messages of a certain size and create queues in order to get database dumps which can be used for testing. The client also needs to implement an interface to the middleware. In order to test the system, the client needs to be able to run over a long period of time without altering the number of messages in the database. I implemented different types of clients which can all be configured by the \texttt{ClientMaster}. The \texttt{ClientMaster} can create, register, deregister and start differint kinds of client instances.
 
 \subsubsection{ClientBase}
 This class provides the basic funcionality. It creates a socket for every request and connects to the middleware. This class defines a function for every type of request the client should be able to perform. Because the requests are serialized as \texttt{Strings} I implemented a class \texttt{Message} which can be used to create a request and then consistently serialize the request. When the client writes a message, a random content is created. There is a method which can create messages with random size in a specified interval.
-Queries can fail, e.g. when two clients try to pop the same message. One client succeeds and delets the message while the other is still reading. The second client will fail. In a real world system the client would probably retry a couple of times and then give up after some time. A problem with this strategy arises when trying to test the system. It might be that there was only one message in the queue, now the other client has to wait for a long time. The client might even stuck if the queue gets deleted in the meantime. In order to get more consistent measurments for the tests, the client symply registers a failed pop request. At a later point the \texttt{ClientWorker} deals with the failed requests as is discussed below.
-Another frequently failed query is when a client tries to delete a non-empty queue. The client gets a SQLException, which has to be catched. When catched, the function returns that the delete was unsuccessful. It is important that a \texttt{rollback()} is executed on the connection, otherwise many of the following queries will fail.
+Queries can fail, e.g. when two clients try to pop the same message. One client succeeds and deletes the message while the other is still reading. The second client will fail. In a real world system the client would probably retry a couple of times and then give up after some time. A problem with this strategy arises when trying to test the system for throughput. It might be that there was only one message in the queue, now the other client has to wait for a long time. The client might even stuck if the queue gets deleted in the meantime. In order to get more consistent measurments for the tests, the client simply registers a failed pop request. At a later point the \texttt{ClientWorker} deals with the failed requests as discussed below.
+A frequently failed query is when a client tries to delete a non-empty queue. The client gets a SQLException, which has to be catched. When catched, the function returns that the delete was unsuccessful. It is important that a \texttt{rollback()} is executed on the connection, otherwise many of the following queries will fail.
 For every request the \texttt{ClientBase} calls the logger.
 
 \subsubsection{FillerClient}
 The FillerClient creates a specified number of queues, then waits for some seconds, retrieves all queues in the system and writes a specified amount of messages into the database. After every message the \texttt{FillerClient} looks if new queues were created. The \texttt{FillerClient} extends the \texttt{ClientWorker} because it should fill the database with the same kind of messages that are created during the experiments. This means that the percentage of messages for a specific receiver and the percentage of messages for everybody should be the same in the initial database dump and during the whole experiment.
 
 \subsubsection{ClientWorker}
-The \texttt{ClientWorker} achieves a mixture of requests for the experiments. It is implemented as an child class of \texttt{ClientBase} A fixed percentage of requests are read requests. The pop and write requests are executed with changing frequencies. This is because write requests have a very high probability to succeed, while about 1\% of pop requests fail. These pop requests are counted by the client. If more writes have been executed than successful pops, the \texttt{ClientWorker} increases the probability of pops and vice versa. This keeps the number of messages in the database constant over a long period of time. This will be verified in section \vref{sec:middlewaretesting}. It is important to mention that the \texttt{ClientWorker} updates the list of queues with messages waiting and clients available periodically. This has been done in order to reduce the number of failed request due to missing messages in queues. But as it turned out this effect can be seen very clear in the experiments and may have an influence on the response time for different intervals. This will be discussed in more detail in the section \vref{sec:2k}
+The \texttt{ClientWorker} achieves a mixture of requests for the experiments. It is implemented as a child class of \texttt{ClientBase} A fixed percentage of requests are read requests. The pop and write requests are executed with changing frequencies. This is because write requests have a very high probability to succeed, while about 2\% of pop requests fail. These pop requests are counted by the client. If more writes have been executed than successful pops, the \texttt{ClientWorker} increases the probability of pops and vice versa. This keeps the number of messages in the database constant over a long period of time. This will be verified in section \vref{sec:middlewaretesting}. It is important to mention that the \texttt{ClientWorker} updates the list of queues with messages waiting and clients available periodically. This has been done in order to reduce the number of failed request due to missing messages in queues. But as it turned out this effect can be seen very clear in the experiments and may have an influence on the response time for different intervals. This will be discussed in more detail in the section \vref{changes}.
 Because the \texttt{ClientWorker} is started with a predefined database, it should register with the id of a client that created the database content. The id needed for registration is calculated in the \texttt{ClientMaster}.
 
 \subsubsection{ClientMaster}
-The \texttt{ClientMaster} represents an Amazon server instance. Its possible to configure the \texttt{ClientMaster} to create \texttt{FillerClient} or \texttt{ClientWorker} instances. The \texttt{ClientMaster} creates a random name in order to identify its log files. All \texttt{ClientBase} instances use their master for logging. As described above, a \texttt{ClientWorker} needs an existing id. Therefore one can configure the \texttt{ClientMaster} to create a specified amount of clients with id starting from the given offset.
+The \texttt{ClientMaster} represents an Amazon server instance. Its possible to configure the \texttt{ClientMaster} to create \texttt{FillerClient} or \texttt{ClientWorker} instances. The \texttt{ClientMaster} creates a random name in order to create unique log files. All \texttt{ClientBase} instances use their master for logging. As described above, a \texttt{ClientWorker} needs an existing id. Therefore one can configure the \texttt{ClientMaster} to create a specified amount of clients with id starting from the given offset.
 
 In order to run the \texttt{ClientMaster}, two different configurations are possible. 
 Fill the database with the help of \texttt{FillerClient} instances:
-\texttt{ant run -Dargs ``<middlewareIP> <\#ofClients> <offset> <verionNumber> <minMessageSize> <maxMessageSize> true <\#ofQueues\/client> <\#messages\/client>''}
+\texttt{ant run -Dargs ``<middlewareIP> <\#ofClients> <offset> <verionNumber> <minMessageSize> <maxMessageSize> true <\#ofQueues\/client> <\#messages\/client>''}, where the offset may be arbitrary, as well as the verionNumber.
 
 Start an experiment on an already existing database:
-\texttt{ant run -Dargs ``<middlewareIP> <\#ofClients> <offset> <verionNumber> <minMessageSize> <maxMessageSize>''}
+\texttt{ant run -Dargs ``<middlewareIP> <\#ofClients> <offset> <verionNumber> <minMessageSize> <maxMessageSize>''}, here again, the versionNumber may be arbitrary, but the offset has to be set correctly if multiple instances are started.
 
 
 \subsubsection{Logging}
-The logging is done for every server instance rather than per client. This facilitates the interpretation of the log files. Therefore the logging is implemented at the level of the \texttt{ClientMaster}. All clients call the logger method in order to log every request. There are two different kinds of logs. One is very similar to the logging in the middleware. For every request, the request type, a timestamp and the execution time are stored. The logs are again written into a buffer and written to file every 250 requests. 
-The second type of logging is done periodically. A thread is invoked every second to collect statistics. Because the thread is not invoked exactly every second, the data gets normalized. Here I measure how often every request type has been executed in the last second. I also log the pop successes and fails. Because I calculate the successes and failes only for a subset of the requests, they don't equal the total amount of requests.
+The logging is done for every server instance rather than per client. This facilitates the interpretation of the log files. Therefore the logging is implemented at the level of the \texttt{ClientMaster}. All clients call the \texttt{ClientMaster}'s logger method in order to log every request. There are two different kinds of logs. One is very similar to the logging in the middleware. For every request, the request type, a timestamp and the execution time are stored. The logs are again written into a buffer and written to file every 250 requests. 
+The second type of logging is done periodically. A thread is invoked every second to collect statistics. Because the thread is not invoked exactly every second, the data gets normalized. Here I measure how often every request type has been executed in the last second. I also log the successes and pop fails. Because I calculate the successes and failes only for a subset of the requests, they don't equal the total amount of requests.
 
 
 \section{Testing}
-For the Testing I run the database and every middlewares on c3.2xlarge instances. To simulate the clients I took c3.xlarge instances and run several clients on the same instance. In the following I will refere to the experiments by there name. The exact configurations for every experiment are shown in table \vref{fig:exp}.
+For the Testing I run the database and all middlewares on c3.2xlarge instances. To simulate the clients I took c3.xlarge instances and run several clients on the same instance. In the following I will refere to the experiments by there name. The exact configurations for every experiment are shown in table \vref{fig:exp}.
 
 \begin{figure}[H]
 \begin{adjustwidth}{-2in}{-2in}
@@ -314,6 +314,7 @@ For the Testing I run the database and every middlewares on c3.2xlarge instances
 
 \subsection{Stability}
 In this section I will show that my system runs stable. This is shown with the same experiments as the middleware testing has been done. For this section I evaluated 8 experiments, the experiments are called m0.*, where the experiments m0.0 to m0.3 describe the first run, the experiments m0.0.0 to m0.3.0 describe the second run. The two sets of experiments have been conducted on two consecutive days, but with a time difference of 6 hours.
+
 \subsubsection{Database}
 First I show that the number of messages in the database is constant over a longer period of time. This is a condition in order to get meaningful test results. This can be seen in figure \vref{fig:numDB}, where the number of messages is shown over 28 minutes from 4 different experiments. The graph shows that the number of messages fluctuates a little, but on average is always around the initial size.
 
@@ -376,8 +377,8 @@ m0.3.0 	& 	1477 	& 	142\\
 \label{tab:througput}
 \end{table}
 
-The performance drop at the beginning may have different causes. One of the causes is that the indices corrupt over time. This causes the indices and the database to grow and get slower. To show the index corruption has an effect on the throughput I conducted experiments r4.0 and r4.1. In these experiments I rebuilt the index after 15 minutes. Once with \texttt{reindex} and once with \texttt{vacuum full} which also rebuilts the database completely from the current snapshot. On the left hand side of figure \vref{fig:vacuum} one can see the database size and the effect the two operations had. On the rigt side the througput is shown. Rebuilding the database and the index clearly have a positive shortterm effect on the performance.
-\TODO{achsen anschreiben}
+The performance drop at the beginning may have different causes. One of the causes is that the indices corrupt over time. This causes the indices and the database to grow and get slower. To show the index corruption has an effect on the throughput I conducted experiments r4.0 and r4.1. In these experiments I rebuilt the index after 15 minutes. Once with \texttt{reindex} and once with \texttt{vacuum full} which  rebuilts the database completely from the current snapshot. On the left hand side of figure \vref{fig:vacuum} one can see the database size and the effect the two operations had. On the rigt side the througput is shown. Rebuilding the database and the index clearly have a positive shortterm effect on the performance.
+
 \begin{figure}[H]
 \centering
 \includegraphics[scale=0.5]{vacuum}
@@ -394,8 +395,8 @@ In this section I have a closer look at the system components. I therefore use t
 
 
 
-Figure \vref{fig:tcomp} shows that the middleware performs the poorest with 4 connections and almost identical with 8, 16 and 32 connections. 
-%This can be explained that the middleware is the bottleneck with only 4 threads and with 8 threads and more the database is the bottleneck. Because the middleware server instance has 8 cores, it performs much better with 8 or more threads than with 4. In order to prove this statements I will  show that the clients never are the bottleneck. This can be done by showing that the response time increases, because this means the clients do nothing but waiting during this time. Then I show that the middleware is the bottleneck when it runs with only 4 connections. This can be shown when the database response time is. I therefore will show that with 32 threads the queueing time is only $1/4$ of the queuing time with 8 threads. This is the case because the more requests wait when holding a database connection instead of in the queue in the 32 thread setup.
+Figure \vref{fig:tcomp} shows that the middleware performs the poorest with 4 connections and almost identical with 8, 16 and 32 connections. This result can be expected as long as the database is not already the bottleneck with 4 connections. It can be expected because the middleware runs on a server with 8 CPU-cores and will have only half its power with 4 threads, compared to 8 or more.
+ 
 
 \begin{figure}[H]
 \centering
@@ -403,6 +404,10 @@ Figure \vref{fig:tcomp} shows that the middleware performs the poorest with 4 co
 \caption{Throughput Comparison}
 \label{fig:tcomp}
 \end{figure}
+
+
+
+
 
 
 \subsection{System performance}
@@ -426,8 +431,8 @@ To evaluate the overall systems performance and to find the configuration with t
 \item number of messages in the database
 \end{itemize}
 
-I decided to run 16 clients on every client server instance on amazon. I also decided to scale the number of queues in the database with the number of messages. Therefore average number of messages in a queue is equal in all experiments. I decided to do this because when a client asks for a message in a queue, all messages in this queue have to be sorted according to the timestamp. This will take the database a long time and I wanted to test if the number of messages has an effect on the execution time and not the number of queues. I also decreased the message size for the dataset with more messages.I did this in order to reduce the effect of the database size on the performance.
-Unfortunatelly I lost the statistic files of two client machine in experiment k2.3. I therefore investigated the differences of the client machines in a single experiment. Figure \vref{fig:compC} shows the 4 client machines for a single experiment in every subplot. Even in the start-up phase the different client machines behave almost equaly. I therefore conclude that doubling the data from the two client machines I have still gives valid results. Another indicator for the very similar performance of the client machines is given in section \vref{changes}, where I show that periodic tasks are done by all clients at almost the same time.
+I decided to run 16 clients on every client server instance. I also decided to scale the number of queues in the database with the number of messages. Therefore the average number of messages in a queue is equal in all experiments. I decided to do this because when a client asks for a message in a queue, all messages in this queue have to be sorted according to the timestamp. This will take the database a long time and I wanted to test if the number of messages has an effect on the execution time and not the number of queues. I also decreased the message size for the dataset with more messages.I did this in order to reduce the effect of the database size on the performance.
+Unfortunatelly I lost the statistic files of two client machine in experiment k2.3. I therefore investigated the differences of the client machines in a single experiment. Figure \vref{fig:compC} shows the 4 client machines for a single experiment in every subplot. Even in the start-up phase the different client machines behave almost equaly. I therefore conclude that doubling the data from the two client machines still gives valid results. Another indicator for the very similar performance of the client machines is given in section \vref{changes}, where I show that periodic tasks are done by all clients at almost the same time.
 
 
 \begin{figure}[H]
@@ -440,16 +445,14 @@ Unfortunatelly I lost the statistic files of two client machine in experiment k2
 \end{figure}
 
 
-The calculation of the different factors can be seen in \TODO{ref and include file for 2k testing}. I didn't include the standard deviation for the response time. It only makes sense to include it for a single operation, but not for all. When a client writes to the database, the socket is close as soon as the request is given to a \texttt{Handler} thread. Therefore a write operion measures only the time in the queue, while requests with a return value measure the whole roundtrip time. Because of the very different execution times of the different requests, the standard deviation over all requests is almost as big as the average value.
+The calculation of the different factors can be seen in \vref{fig:2k}. I didn't include the standard deviation for the response time. It only makes sense to include it for a single type of operation, but not for all. When a client writes to the database, the socket is close as soon as the request is given to a \texttt{Handler} thread. Therefore a write operation measures only the time in the queue, while requests with a return value measure the whole roundtrip time. Because of the very different execution times of the different requests, the standard deviation over all requests is almost as big as the average value.
 
-The number of middleware connection has no influence on the system's performance for this setup. This was expected since the database was already the bottleneck in experiments m0.1 to m0.3 where only 1 middleware was used. Therefore it makes no difference if the system runs with 4 or 8 middlewares.
-
-The number of connections per middleware also has very little influence on the system. This can be explain as above. The database comes at its limits with 8 connections of 1 middleware, in this setup I have at least 16 connections, which makes the database the bottleneck as shown above.
+The number of middlewares has little influence on the system's performance. If the number of middlewares has little influence on the system's performance than the Database has to be the bottleneck. In this case the number of connections cannot have an influence on the overall performance. This is because the database has 8 CPU-cores and should therefore perform best with 8 or 16 (hyperthreading) threads. Conducting the experiment with 8 connections per middleware would have given a performance increase in case the middleware was the bottleneck with only 4 threads, as can be seen in figure \vref{fig:tcomp}.
 
 The number of messages has a huge impact on the system. If the database has more messages it is much slower. As already explained, this is not because the queues are longer and it takes longer to sort the messages. The effect is mainly because the metadata table is twice as big for the setup with more messages. For every request the whole table, meaning one or more indices have to be queried. Since these indices are also twice as big the performance is worse. 
 
 
-The number of clients has a huge impact on the systems performance. More clients reduces the throughput and increases the response time. With twice as many clients but the same database performance it can be expected that the responstime doubles, since the throughput stays the same. But I am not sure why it has such a huge influence on the throughput.
+The number of clients has a huge impact on the systems performance. More clients reduces the throughput and increases the response time. With twice as many clients but the same database performance it can be expected that the responstime doubles, since the throughput stays the same. But I am not sure why it has such a huge influence on the throughput. A possible explenation could be that more clients increase the probability of cache misses. With fewer clients maybe the queues for most clients could be kept in memory. 
 
 
 
