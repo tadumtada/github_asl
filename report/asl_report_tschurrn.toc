@@ -19,7 +19,7 @@
 \contentsline {subsubsection}{\numberline {3.1.2}Amazon Servers}{11}{subsubsection.3.1.2}
 \contentsline {subsection}{\numberline {3.2}Throughput and Response Time}{12}{subsection.3.2}
 \contentsline {subsection}{\numberline {3.3}Middleware and Database in Depth}{12}{subsection.3.3}
-\contentsline {subsection}{\numberline {3.4}System performance}{13}{subsection.3.4}
+\contentsline {subsection}{\numberline {3.4}System Performance}{14}{subsection.3.4}
 \contentsline {section}{\numberline {4}Possible Project Changes}{16}{section.4}
 \contentsline {subsection}{\numberline {4.1}System Changes}{16}{subsection.4.1}
 \contentsline {subsection}{\numberline {4.2}Experiment Changes}{17}{subsection.4.2}

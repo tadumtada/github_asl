@@ -89,8 +89,7 @@ BCOR5mm, % Binding correction
 %	ABSTRACT
 %----------------------------------------------------------------------------------------
 
-\section*{Abstract} 
-\TODO{write abstract}
+
 
 %----------------------------------------------------------------------------------------
 %	AUTHOR AFFILIATIONS
@@ -406,11 +405,51 @@ Figure \vref{fig:tcomp} shows that the middleware performs the poorest with 4 co
 \end{figure}
 
 
+ The average waiting time inside the middleware queue decreases, with the number of threads in the middleware, even if the throughput stays the same. This is because the requests get a database connection sooner but therefore have to wait longer for the database to respond. In the table \vref{tab:respT} the database response time per query is shown, as well as if it would be normalized for one connection. One can see that these times are equal for experiments m0.1.0 to m0.3.0, which again explains the equal throughput. If the middleware wouldn't be able to handle the many requests and the database wasn't under full load, I would expect the database execution time to stay equal for every request. Since this is not the case I conclude that the database is the bottleneck in this situation and the middleware is actually capable to support 128 clients. The database is not under full load in the experiment m0.0.0 because only half of the database servers cores are used, which means that in this configuration the system is not under full load.
+
+
+\begin{table}[H]
+
+\caption{Average Time in Middleware Queue, \*10\^{}8}
+\centering
+\begin{tabular}{|r|l|}
+\toprule
+Experiment & Waiting Time\\
+\midrule
+m0.0.0&2.12\\
+m0.1.0&1.59\\
+m0.2.0&1.42\\.
+m0.3.0&1.27\\
+\bottomrule
+\end{tabular}
+\label{tab:queueT}
+\end{table}
+
+
+\begin{table}[H]
+
+\caption{Average Database Response Times, \*10\^{}6}
+\centering
+\begin{tabular}{|r|l|l|}
+\toprule
+Experiment & Db Respons Time & RT/connection\\
+\midrule
+m0.0.0&4.46&1.15\\
+m0.1.0&6.95&0.87\\
+m0.2.0&13.2&0.82\\.
+m0.3.0&27.3&0.85\\
+\bottomrule
+\end{tabular}
+\label{tab:respT}
+\end{table}
 
 
 
 
-\subsection{System performance}
+
+
+
+\subsection{System Performance}
 \label{sec:2k}
 
 
@@ -443,6 +482,7 @@ Unfortunatelly I lost the statistic files of two client machine in experiment k2
 \label{fig:compC}
 \end{adjustwidth}
 \end{figure}
+
 
 
 The calculation of the different factors can be seen in \vref{fig:2k}. I didn't include the standard deviation for the response time. It only makes sense to include it for a single type of operation, but not for all. When a client writes to the database, the socket is close as soon as the request is given to a \texttt{Handler} thread. Therefore a write operation measures only the time in the queue, while requests with a return value measure the whole roundtrip time. Because of the very different execution times of the different requests, the standard deviation over all requests is almost as big as the average value.
